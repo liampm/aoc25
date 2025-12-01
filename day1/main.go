@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type direction int
@@ -30,80 +31,79 @@ func main() {
 
 	reader := bufio.NewReader(f)
 
-	pointsOnDial := 100
+	const pointsOnDial = 100
 	runningValue := 50
 	timesAtZero := 0
 	lastChar := '\n'
-	dir := direction(1)
-	moveBy := ""
+	dir := R
+	var moveBy strings.Builder
 
 	for {
-		if c, _, err := reader.ReadRune(); err != nil {
+		c, _, err := reader.ReadRune()
+		if err != nil {
 			if err == io.EOF {
 				break
 			} else {
 				log.Fatal(err)
 			}
 			return
-		} else {
-			if lastChar == '\n' {
-				switch c {
-				case 'L':
-					dir = L
-				case 'R':
-					dir = R
-				default:
-					log.Fatal(fmt.Sprintf("Incorrectly formatted line: Should be 'L' or 'R', got %q", c))
-				}
-				lastChar = c
+		}
+
+		if lastChar == '\n' {
+			switch c {
+			case 'L':
+				dir = L
+			case 'R':
+				dir = R
+			default:
+				log.Fatal(fmt.Sprintf("Incorrectly formatted line: Should be 'L' or 'R', got %q", c))
+			}
+			lastChar = c
+			continue
+		}
+
+		lastChar = c
+
+		if c == '\n' {
+			moveByInt, moveByErr := strconv.Atoi(moveBy.String())
+			if moveByErr != nil {
+				log.Fatal(fmt.Errorf("Unable to parse moveBy (%s) to integer: %w", moveBy.String(), moveByErr))
+			}
+			moveBy.Reset()
+
+			if *countAny {
+				timesAtZero += moveByInt / pointsOnDial // 1 pass of zero for each full rotation
+			}
+			// apply the remaining moves after removing full rotations
+			moveByInt %= pointsOnDial
+			if moveByInt == 0 {
+				// no more moves
 				continue
 			}
+			oldValue := runningValue
+			moveByInt *= int(dir)
+			runningValue += moveByInt
 
-			lastChar = c
-
-			if c == '\n' {
-				moveByInt, moveByErr := strconv.Atoi(moveBy)
-				if moveByErr != nil {
-					log.Fatal(fmt.Errorf("Unable to parse moveBy (%s) to integer: %w", moveBy, moveByErr))
-				}
-
+			if runningValue > (pointsOnDial - 1) { // overflowing
+				runningValue -= pointsOnDial
 				if *countAny {
-					timesAtZero += moveByInt / pointsOnDial // 1 pass of zero for each full rotation
-				}
-				// apply the remaining moves after removing full rotations
-				moveByInt %= pointsOnDial
-				if moveByInt == 0 {
-					// no more moves
-					moveBy = ""
+					timesAtZero++
 					continue
 				}
-				oldValue := runningValue
-				moveByInt *= int(dir)
-				runningValue += moveByInt
-
-				if runningValue > (pointsOnDial - 1) { // overflowing
-					runningValue -= pointsOnDial
-					if *countAny {
-						timesAtZero++
-						moveBy = ""
-						continue
-					}
-				} else if runningValue < 0 { // underflowing
-					runningValue = pointsOnDial + runningValue
-					if *countAny && oldValue != 0 { // hasn't passed zero if it started there
-						timesAtZero++
-						moveBy = ""
-						continue
-					}
-				}
-
-				if runningValue == 0 {
+			} else if runningValue < 0 { // underflowing
+				runningValue = pointsOnDial + runningValue
+				if *countAny && oldValue != 0 { // hasn't passed zero if it started there
 					timesAtZero++
+					continue
 				}
-				moveBy = ""
-			} else {
-				moveBy += string(c)
 			}
+
+			if runningValue == 0 {
+				timesAtZero++
+			}
+
+		} else {
+			moveBy.WriteRune(c)
 		}
 	}
 	fmt.Printf("Times at zero: %d\n", timesAtZero)
